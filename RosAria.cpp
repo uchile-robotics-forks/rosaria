@@ -514,7 +514,19 @@ int RosAriaNode::Setup()
 
 void RosAriaNode::spin()
 {
-  ros::spin();
+
+  ros::Rate r(30); // 30 hz
+  while(ros::ok()) {
+
+    ros::spinOnce();
+
+    if (!robot->areMotorsEnabled() && !robot->isEStopPressed()){
+      std_srvs::Empty srv = std_srvs::Empty();
+      enable_motors_cb(srv.request,srv.response);
+      ROS_WARN("Stop button has been released. Enabling motors :)");
+    }
+    r.sleep();
+  }
 }
 
 void RosAriaNode::publish()
