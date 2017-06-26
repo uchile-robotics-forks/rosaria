@@ -515,7 +515,7 @@ int RosAriaNode::Setup()
 
   // register a watchdog for cmd_vel timeout
   double cmdvel_timeout_param = 0.6;
-  n.param("cmd_vel_timeout", cmdvel_timeout_param, 0.6);
+  n.param("cmd_vel_timeout", cmdvel_timeout_param, cmdvel_timeout_param);
   cmdvel_timeout = ros::Duration(cmdvel_timeout_param);
   if (cmdvel_timeout_param > 0.0)
     cmdvel_watchdog_timer = n.createTimer(ros::Duration(0.1), &RosAriaNode::cmdvel_watchdog, this);
@@ -745,7 +745,7 @@ RosAriaNode::cmdvel_cb( const geometry_msgs::TwistConstPtr &msg)
 void RosAriaNode::cmdvel_watchdog(const ros::TimerEvent& event)
 {
   // stop robot if no cmd_vel message was received for 0.6 seconds
-  if (ros::Time::now() - veltime > ros::Duration(0.6))
+  if (ros::Time::now() - veltime > cmdvel_timeout)
   {
     robot->lock();
     robot->setVel(0.0);
