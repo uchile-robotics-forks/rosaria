@@ -133,6 +133,9 @@ class RosAriaNode
 
     // whether to publish aria lasers
     bool publish_aria_lasers;
+
+    // timeout parameter for cmd_vel watchdog
+    double cmdvel_timeout_param;
 };
 
 void RosAriaNode::readParameters()
@@ -284,7 +287,7 @@ RosAriaNode::RosAriaNode(ros::NodeHandle nh) :
   sonar_enabled(false), publish_sonar(false), publish_sonar_pointcloud2(false),
   debug_aria(false), 
   TicksMM(-1), DriftFactor(-99999), RevCount(-1),
-  publish_aria_lasers(false)
+  publish_aria_lasers(false), cmdvel_timeout_param(0.6)
 {
   // read in runtime parameters
 
@@ -308,6 +311,9 @@ RosAriaNode::RosAriaNode(ros::NodeHandle nh) :
   n.param("base_link_frame", frame_id_base_link, std::string("base_link"));
   n.param("bumpers_frame", frame_id_bumper, std::string("bumpers"));
   n.param("sonar_frame", frame_id_sonar, std::string("sonar"));
+
+  // get cmd_vel_timeout parameter
+  n.param("cmd_vel_timeout", cmdvel_timeout_param, cmdvel_timeout_param);
 
   // advertise services for data topics
   // second argument to advertise() is queue size.
@@ -470,7 +476,6 @@ int RosAriaNode::Setup()
 
   // disable sonars on startup
   robot->disableSonar();
-
   // callback will  be called by ArRobot background processing thread for every SIP data packet received from robot
   robot->addSensorInterpTask("ROSPublishingTask", 100, &myPublishCB);
 
@@ -514,11 +519,14 @@ int RosAriaNode::Setup()
       boost::bind(&RosAriaNode::cmdvel_cb, this, _1 ));
 
   // register a watchdog for cmd_vel timeout
-  double cmdvel_timeout_param = 0.6;
-  n.param("cmd_vel_timeout", cmdvel_timeout_param, cmdvel_timeout_param);
   cmdvel_timeout = ros::Duration(cmdvel_timeout_param);
   if (cmdvel_timeout_param > 0.0)
     cmdvel_watchdog_timer = n.createTimer(ros::Duration(0.1), &RosAriaNode::cmdvel_watchdog, this);
+
+  // wait a while until motors are enabled
+  // this avoids attempts to enable_motors_cb when the base is not ready.
+  // it also prevents serving ROS requests if not ready!
+  ros::Duration(2.0).sleep();
 
   ROS_INFO_NAMED("rosaria", "rosaria: Setup complete");
   return 0;
@@ -535,7 +543,10 @@ void RosAriaNode::spin()
     if (!robot->areMotorsEnabled() && !robot->isEStopPressed()){
       std_srvs::Empty srv = std_srvs::Empty();
       enable_motors_cb(srv.request,srv.response);
-      ROS_WARN("Stop button has been released. Enabling motors :)");
+      ROS_WARN("Stop button has been released. Enabling motors.");
+
+      // motors take a while to be enabled! (~100ms, but using 500ms just to be sure)
+      ros::Duration(0.5).sleep();
     }
     r.sleep();
   }
@@ -747,6 +758,7 @@ void RosAriaNode::cmdvel_watchdog(const ros::TimerEvent& event)
   // stop robot if no cmd_vel message was received for 0.6 seconds
   if (ros::Time::now() - veltime > cmdvel_timeout)
   {
+    ROS_INFO_THROTTLE(0.5, "RosAria: cmdvel_watchdog is stopping the base.");
     robot->lock();
     robot->setVel(0.0);
     if(robot->hasLatVel())
