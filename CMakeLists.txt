@@ -63,6 +63,11 @@ target_link_libraries(RosAria ${catkin_LIBRARIES} ${Boost_LIBRARIES} Aria pthrea
 set_target_properties(RosAria PROPERTIES COMPILE_FLAGS "-fPIC")
 #set_target_properties(RosAria PROPERTIES LINK_FLAGS "-Wl")
 
+# Aria demo copied from the Aria 2.8.0
+# This is useful for robot configuration
+add_executable(AriaDemo AriaDemo.cpp)
+target_link_libraries(AriaDemo Aria)
+
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
   DEPENDENCIES geometry_msgs std_msgs
